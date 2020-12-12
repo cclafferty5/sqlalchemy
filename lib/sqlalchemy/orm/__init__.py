@@ -83,6 +83,7 @@ from .util import with_polymorphic  # noqa
 from .. import sql as _sql
 from .. import util as _sa_util
 from ..util.langhelpers import public_factory
+from .cache import CachedSessionManager
 
 
 def create_session(bind=None, **kwargs):

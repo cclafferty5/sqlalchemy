@@ -858,6 +858,7 @@ class Session(_SessionClassMethods):
         enable_baked_queries=True,
         info=None,
         query_cls=None,
+        cache=None,
     ):
         r"""Construct a new Session.
 
@@ -1016,6 +1017,7 @@ class Session(_SessionClassMethods):
         self.autoflush = autoflush
         self.expire_on_commit = expire_on_commit
         self.enable_baked_queries = enable_baked_queries
+        self.cache = cache
 
         if autocommit:
             if future:

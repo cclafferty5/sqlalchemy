@@ -2,6 +2,11 @@ from .session import Session
 from .query import Query
 from . import scoped_session
 from .. import event
+from . import loading
+from .interfaces import UserDefinedOption
+from enum import Enum
+
+from hashlib import md5
 
 class CachedQuery(Query):
     # Do we need this? Probably not.
@@ -11,7 +16,8 @@ class CachedSessionManager(scoped_session):
 
     def __init__(self, session_factory, scopedfunc=None):
         super().__init__(session_factory, scopedfunc)
-        self.cache = ORMCache()
+        self.cache = SimpleORMCache()
+        self.session_factory.kw['cache'] = self.cache
         self.cache.listen_on_session(self.session_factory)
     
     # TODO: we need to make this a global session manager that coordinates resources for best cache perfomance
@@ -19,6 +25,10 @@ class CachedSessionManager(scoped_session):
 """
 Code below inspired by the exmample dogpile caching walkthrough
 """
+
+class CacheValue(Enum):
+    NO_VALUE = object()
+
 
 class ORMCache(object):
 
@@ -28,21 +38,28 @@ class ORMCache(object):
 
     # TODO: we need to actually make the cache lol
 
-    def __init__(self, regions, cache_key_seed=None):
-        self.cache_regions = regions
+    def __init__(self, cache_key_seed=None):
         self._statement_cache = {}
+        self.cache_key_seed = cache_key_seed
+
 
     def listen_on_session(self, session_factory):
         event.listen(session_factory, "do_orm_execute", self._do_orm_execute)
 
     def _generate_cache_key(self, statement, parameters):
+        #cache key needs to be a tuple of hashes, or a hash of the hases.
+        #tuple of hashes allows for marginal matching but uses more space.
+        #hash of hashes reduces space used but removes marginal matching functionality.
+        #see base.py line 700. -> Adding a _generate_opyql_cache_key() func.
+        #and traversals.py 
+        #https://pypi.org/project/sqlparse/ -> parser
+        
         statement_cache_key = statement._generate_cache_key()
 
         key = statement_cache_key.to_offline_string(
             self._statement_cache, statement, parameters
-        ) + repr(self.cache_key)
-
-        return key
+        ) + repr(self.cache_key_seed)
+        return md5(key.encode("ascii")).hexdigest()
 
     def _do_orm_execute(self, orm_context):
         # TODO: implement our caching scheme here
@@ -76,7 +93,7 @@ class ORMCache(object):
                         expiration_time=opt.expiration_time,
                     )
 
-                if cached_value is NO_VALUE:
+                if cached_value is CacheValue.NO_VALUE:
                     # keyerror?   this is bigger than a keyerror...
                     raise KeyError()
 
@@ -107,6 +124,28 @@ class ORMCache(object):
         # TODO: fill this out, but make it threaded (i.e. have the creater thread(s?) call the createfunc function)
         pass
 
+class SimpleORMCache(ORMCache):
+    
+    def __init__(self, cache_key_seed=None):
+        """
+        Creates a simple implementation of an ORMCache
+        """
+        super().__init__(cache_key_seed=cache_key_seed)
+        self.cache = {}
+    
+    def _do_orm_execute(self, orm_context):
+        our_cache_key = self._generate_cache_key(
+            orm_context.statement, orm_context.parameters
+        )
+        def createfunc():
+            return orm_context.invoke_statement().freeze()
+
+        if our_cache_key not in self.cache:
+            result = self.cache[our_cache_key] = createfunc()
+        else:
+            result = self.cache[our_cache_key]
+        orm_result = loading.merge_frozen_result(orm_context.session, orm_context.statement, result, load=False)
+        return orm_result()
 
 
 # Next two classes will not be needed in our scheme, left them here for inspiration
@@ -151,8 +190,7 @@ class FromCache(UserDefinedOption):
             orm_cache._statement_cache, statement, parameters
         ) + repr(self.cache_key)
 
-        # print("here's our key...%s" % key)
-        return key
+        return md5(key.encode("ascii")).hexdigest()
 
 
 class RelationshipCache(FromCache):
