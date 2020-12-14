@@ -839,6 +839,13 @@ def _instance_processor(
 
     def _instance(row):
 
+        update_cache = None
+        if hasattr(context.session, "cache"):
+            cached_value = context.session.cache.get(row, table_key=identity_class)
+            if cached_value:
+                return cached_value
+            else:
+                update_cache = context.session.cache
         # determine the state that we'll be populating
         if refresh_identity_key:
             # fixed state that we're refreshing
@@ -990,6 +997,8 @@ def _instance_processor(
             if post_load and context.invoke_all_eagers:
                 post_load.add_state(state, False)
 
+        if update_cache:
+            update_cache.put(row, instance, table_key=identity_class)
         return instance
 
     if mapper.polymorphic_map and not _polymorphic_from and not refresh_state:

@@ -5,7 +5,7 @@ from .. import event
 from . import loading
 from .interfaces import UserDefinedOption
 from enum import Enum
-
+from .. import create_engine
 from hashlib import md5
 
 class CachedQuery(Query):
@@ -18,14 +18,39 @@ class CachedSessionManager(scoped_session):
         super().__init__(session_factory, scopedfunc)
         self.cache = SimpleORMCache()
         self.session_factory.kw['cache'] = self.cache
-        self.cache.listen_on_session(self.session_factory)
+        #self.cache.listen_on_session(self.session_factory)
+        self.configure(cache=self.cache)
     
     # TODO: we need to make this a global session manager that coordinates resources for best cache perfomance
 
+class InMemoryDBCache(object):
+
+    def __init__(self):
+        #might also be able to just do sqlite:// instead of sqlite:///:memory:
+        self.engine = create_engine('sqlite:///:memory:', echo=True)
+        self.conn = engine.connect() #keep a warm connection so we don't have overhead of creating this every time
+
+        metadata = Metadata()
+        cache = Table('cache', metadata,
+                Column('table_name', String),
+                Column('group_by', String),
+                Column('where', String),
+                Column('column', String),
+
+                Column('value', String) 
+            ) #value represents the serialized object
+    
+    #might need to change params for this based on how we want to pass things in.
+    def insert(self, table_name, group_by, where, column, value):
+        #ideally table_name, group_by, where, column are all strings. We only need to pickle value.
+        pass
+        
+        
 """
 Code below inspired by the exmample dogpile caching walkthrough
 """
 
+# not needed?
 class CacheValue(Enum):
     NO_VALUE = object()
 
@@ -47,7 +72,7 @@ class ORMCache(object):
         event.listen(session_factory, "do_orm_execute", self._do_orm_execute)
 
     def _generate_cache_key(self, statement, parameters):
-        #cache key needs to be a tuple of hashes, or a hash of the hases.
+        #cache key needs to be a tuple of hashes, or a hash of the hashes.
         #tuple of hashes allows for marginal matching but uses more space.
         #hash of hashes reduces space used but removes marginal matching functionality.
         #see base.py line 700. -> Adding a _generate_opyql_cache_key() func.
@@ -146,6 +171,13 @@ class SimpleORMCache(ORMCache):
             result = self.cache[our_cache_key]
         orm_result = loading.merge_frozen_result(orm_context.session, orm_context.statement, result, load=False)
         return orm_result()
+
+    def get(self, key, table_key=None):
+        return self.cache.get(key)
+
+    def put(self, key, instance, table_key=None):
+        self.cache[key] = instance
+        
 
 
 # Next two classes will not be needed in our scheme, left them here for inspiration
