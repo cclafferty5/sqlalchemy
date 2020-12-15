@@ -2371,6 +2371,7 @@ class Session(_SessionClassMethods):
         if _warn and self._warn_on_events:
             self._flush_warning("Session.add()")
 
+
         try:
             state = attributes.instance_state(instance)
         except exc.NO_STATE as err:
@@ -3205,6 +3206,11 @@ class Session(_SessionClassMethods):
                 flush_context.execute()
             finally:
                 self._warn_on_events = False
+            if self.cache:
+                for state, obj in self._new.items():
+                    attrs = [a[0] for a in state.mapper.columns._collection]
+                    row = tuple(getattr(state.attrs, attr).value for attr in attrs)
+                    self.cache.put(row, obj, table_key=obj.__class__)
 
             self.dispatch.after_flush(self, flush_context)
 

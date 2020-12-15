@@ -8,9 +8,13 @@ from enum import Enum
 from .. import create_engine
 from hashlib import md5
 
-class CachedQuery(Query):
-    # Do we need this? Probably not.
-    pass
+class Cache(object):
+
+    def get(self, key):
+        pass
+
+    def put(self, key, instance):
+        pass
 
 class CachedSessionManager(scoped_session):
 
@@ -23,7 +27,7 @@ class CachedSessionManager(scoped_session):
     
     # TODO: we need to make this a global session manager that coordinates resources for best cache perfomance
 
-class InMemoryDBCache(object):
+class InMemoryDBCache(Cache):
 
     def __init__(self):
         #might also be able to just do sqlite:// instead of sqlite:///:memory:
@@ -55,7 +59,7 @@ class CacheValue(Enum):
     NO_VALUE = object()
 
 
-class ORMCache(object):
+class ORMCache(Cache):
 
     """An add-on for an ORM :class:`.Session` optionally loads full results
     from a memory-loaded cache.

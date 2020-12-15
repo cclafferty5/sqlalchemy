@@ -840,7 +840,7 @@ def _instance_processor(
     def _instance(row):
 
         update_cache = None
-        if hasattr(context.session, "cache"):
+        if hasattr(context.session, "cache") and context.session.cache:
             cached_value = context.session.cache.get(row, table_key=identity_class)
             if cached_value:
                 return cached_value
