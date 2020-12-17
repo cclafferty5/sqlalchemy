@@ -17,10 +17,12 @@ class Customer(Base):
     __tablename__ = "customer"
     id = Column(Integer, primary_key=True)
     name = Column(String(255))
+    age = Column(Integer())
 
 
 def init_sqlalchemy(dbname='sqlite:///sqlalchemy.db'):
     global engine
+    global cache_engine
     engine = create_engine(dbname, echo=False)
     cache_engine = create_engine('sqlite:///cache.db', echo=False)
     DBSession.remove()
@@ -47,12 +49,18 @@ def test_sqlalchemy_cache():
     customer1_again = CachedDBSession.query(Customer).filter_by(name='NAME 1').one()
     print("Cache is correct even in a new session:", customer1_again is customer1)
 
+def time_query(query):
+    t0 = time.time()
+    customers = query.all()
+    return time.time() - t0, customers
+
 def test_sqlalchemy_cache_bulk(n=100000):
     init_sqlalchemy()
     for i in range(n):
         customer1 = Customer()
         customer2 = Customer()
         customer1.name = customer2.name = 'NAME 1'
+        customer1.age = customer2.age = i % 10
         DBSession.add(customer1)
         CachedDBSession.add(customer2)
         if i % 1000 == 0:
@@ -61,13 +69,63 @@ def test_sqlalchemy_cache_bulk(n=100000):
     DBSession.commit()
     CachedDBSession.commit()
     t0 = time.time()
-    customers = DBSession.query(Customer).filter_by(name='NAME 1').all()
+    customers = DBSession.query(Customer).filter_by(name='NAME 1', age=5).all()
     no_cache_time = time.time() - t0
     t0 = time.time()
-    cached_customers = CachedDBSession.query(Customer).filter_by(name='NAME 1').all()
+    cached_customers = CachedDBSession.query(Customer).filter_by(name='NAME 1', age=5).all()
     cache_time = time.time() - t0
     print("No cache time:", no_cache_time)
     print("Cached time:", cache_time)
+
+def test_cache(n=100000):
+    init_sqlalchemy()
+    for i in range(n):
+        customer1 = Customer()
+        customer2 = Customer()
+        customer1.name = customer2.name = 'NAME 1'
+        customer1.age = customer2.age = i % 10
+        DBSession.add(customer1)
+        CachedDBSession.add(customer2)
+        if i % 1000 == 0:
+            DBSession.flush()
+            CachedDBSession.flush()
+    DBSession.commit()
+    CachedDBSession.commit()
+    time1, customers1 = time_query(DBSession.query(Customer).filter_by(name='NAME 1', age=5))
+    time2, customers2 = time_query(CachedDBSession.query(Customer).filter_by(name='NAME 1', age=5))
+    print(time1, time2)
+    return time1, time2
+
+def test_cache_pk(n=100000):
+    init_sqlalchemy()
+    for i in range(n):
+        customer1 = Customer()
+        customer2 = Customer()
+        customer1.name = customer2.name = 'NAME 1'
+        customer1.age = customer2.age = i % 10
+        DBSession.add(customer1)
+        CachedDBSession.add(customer2)
+        if i % 1000 == 0:
+            DBSession.flush()
+            CachedDBSession.flush()
+    DBSession.commit()
+    CachedDBSession.commit()
+    time1, customers1 = time_query(DBSession.query(Customer))
+    time2, customers2 = time_query(CachedDBSession.query(Customer))
+    
+    return time1, time2
+
+def test_cache_iter(ns=[1000, 10000, 100000, 1000000], f=test_cache):
+    result = []
+    for n in ns:
+        no_cache_time, cache_time = f(n)
+        print("No cache time at n=%d:" % n, no_cache_time)
+        print("Cached time at n=%d:" % n, cache_time)
+        hit_rate = CachedDBSession.cache.get_hit_rate()
+        print("Cache hit rate:", hit_rate)
+        print("------------")
+        result.append((no_cache_time, cache_time, hit_rate))
+    print(result)
 
 
 
@@ -169,7 +227,8 @@ def test_sqlite3(n=100000, dbname='sqlite3.db'):
         " records " + str(time.time() - t0) + " sec")
 
 if __name__ == '__main__':
-    test_sqlalchemy_cache_bulk()
+    test_cache_iter()
+    #test_sqlalchemy_cache_bulk()
     #test_sqlalchemy_cache()
     test_sqlalchemy_orm(100000)
     test_sqlalchemy_orm_pk_given(100000)

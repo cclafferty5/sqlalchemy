@@ -7,6 +7,7 @@ from .interfaces import UserDefinedOption
 from enum import Enum
 from .. import create_engine
 from hashlib import md5
+import random
 
 class Cache(object):
 
@@ -22,8 +23,11 @@ class CachedSessionManager(scoped_session):
         super().__init__(session_factory, scopedfunc)
         self.cache = SimpleORMCache()
         self.session_factory.kw['cache'] = self.cache
-        #self.cache.listen_on_session(self.session_factory)
         self.configure(cache=self.cache)
+
+    def remove(self):
+        super().remove()
+        #self.cache = SimpleORMCache()
     
     # TODO: we need to make this a global session manager that coordinates resources for best cache perfomance
 
@@ -155,14 +159,25 @@ class ORMCache(Cache):
 
 class SimpleORMCache(ORMCache):
     
-    def __init__(self, cache_key_seed=None):
+    def __init__(self,
+                 size=100000,
+                 cache_key_seed=None,
+                 eviction_policy="Random",
+                 monitor_hit_rate=True
+                 ):
         """
         Creates a simple implementation of an ORMCache
         """
         super().__init__(cache_key_seed=cache_key_seed)
         self.cache = {}
+        self.size = size
+        self.eviction_policy = eviction_policy
+        self.monitor_hit_rate = monitor_hit_rate
+        self.hits = self.accesses = 0
+        self.last_key = None
     
     def _do_orm_execute(self, orm_context):
+        # matches by query exactly
         our_cache_key = self._generate_cache_key(
             orm_context.statement, orm_context.parameters
         )
@@ -176,10 +191,26 @@ class SimpleORMCache(ORMCache):
         orm_result = loading.merge_frozen_result(orm_context.session, orm_context.statement, result, load=False)
         return orm_result()
 
+    def _simple_evict(self):
+        self.cache.popitem()
+
+    def _evict(self):
+        self.cache.popitem()
+
+    def get_hit_rate(self):
+        return self.hits / self.accesses
+
     def get(self, key, table_key=None):
-        return self.cache.get(key)
+        val = self.cache.get(key)
+        self.accesses += 1
+        self.hits += int(val is not None)
+        return val
+        
 
     def put(self, key, instance, table_key=None):
+        if len(self.cache) > self.size:
+            self._evict()
+        self.last_key = key
         self.cache[key] = instance
         
 
