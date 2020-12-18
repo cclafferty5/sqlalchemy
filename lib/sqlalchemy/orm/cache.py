@@ -7,7 +7,11 @@ from .interfaces import UserDefinedOption
 from enum import Enum
 from .. import create_engine
 from hashlib import md5
+from cacheout.rr import RRCache
+from cacheout import Cache
+
 import random
+import time
 
 class Cache(object):
 
@@ -212,6 +216,7 @@ class SimpleORMCache(ORMCache):
             self._evict()
         self.last_key = key
         self.cache[key] = instance
+        # self.cache.set(key, instance)
         
 
 
