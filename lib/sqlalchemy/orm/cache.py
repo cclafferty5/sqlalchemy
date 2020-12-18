@@ -205,7 +205,7 @@ class SimpleORMCache(ORMCache):
         return self.hits / self.accesses
 
     def get(self, key, table_key=None):
-        val = self.cache.get(key)
+        val = self.cache.get((table_key, key))
         self.accesses += 1
         self.hits += int(val is not None)
         return val
@@ -215,10 +215,8 @@ class SimpleORMCache(ORMCache):
         if len(self.cache) > self.size:
             self._evict()
         self.last_key = key
-        self.cache[key] = instance
+        self.cache[(table_key, key)] = instance
         # self.cache.set(key, instance)
-        
-
 
 # Next two classes will not be needed in our scheme, left them here for inspiration
 

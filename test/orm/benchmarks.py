@@ -14,7 +14,7 @@ DBSession = scoped_session(sessionmaker())
 CachedDBSession = CachedSessionManager(sessionmaker())
 engine = None
 cache_engine = None
-TABLESIZE = 10000
+TABLESIZE = 30000
 
 class TableOne(Base):
     __tablename__ = "TableOne"
@@ -101,12 +101,12 @@ def fill_table(n, table):
 
 def fill_tables(n):
     for table in tables:
-        print("Creating {}".format(table.__tablename__))
+        print("Creating {} with {} rows".format(table.__tablename__, n))
         fill_table(n, table)
 
-def init_benchmarks():
+def init_benchmarks(tablesize=TABLESIZE):
     init_sqlalchemy()
-    fill_tables(TABLESIZE) 
+    fill_tables(tablesize) 
 
 def random_where_query(table, b, c):
     nc_query = DBSession.query(table).filter(table.b > b, table.c > c)
@@ -128,6 +128,11 @@ def time_random_queries(num_queries):
 
     print("Cache time: {}".format(time_queries(cached_queries)))
 
+def run_benchmarks():
+    tablesizes = [10000, 20000, 30000, 40000, 50000, 60000]
+    for tablesize in tablesizes:
+        init_benchmarks(tablesize=tablesize)
+        time_random_queries(30)
+
 if __name__ == "__main__":
-    init_benchmarks()
-    time_random_queries(30)
+    run_benchmarks()
