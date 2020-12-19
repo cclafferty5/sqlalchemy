@@ -7,8 +7,7 @@ from .interfaces import UserDefinedOption
 from enum import Enum
 from .. import create_engine
 from hashlib import md5
-from cacheout.rr import RRCache
-from cacheout import Cache
+
 
 import random
 import time
@@ -28,6 +27,7 @@ class CachedSessionManager(scoped_session):
         self.cache = SimpleORMCache()
         self.session_factory.kw['cache'] = self.cache
         self.configure(cache=self.cache)
+        #self.cache.listen_on_session(session_factory)
 
     def remove(self):
         super().remove()
@@ -217,6 +217,10 @@ class SimpleORMCache(ORMCache):
         self.last_key = key
         self.cache[(table_key, key)] = instance
         # self.cache.set(key, instance)
+
+    def reset(self):
+        self.cache = {}
+        self.hits = self.accesses = 0
 
 # Next two classes will not be needed in our scheme, left them here for inspiration
 

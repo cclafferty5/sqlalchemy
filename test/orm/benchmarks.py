@@ -67,6 +67,7 @@ def init_sqlalchemy(dbname='sqlite:///sqlalchemy.db'):
     DBSession.configure(bind=engine, autoflush=False, expire_on_commit=False)
     CachedDBSession.remove()
     CachedDBSession.configure(bind=cache_engine, autoflush=False, expire_on_commit=False)
+    CachedDBSession.cache.reset()
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     Base.metadata.drop_all(cache_engine)
@@ -119,20 +120,29 @@ def time_queries(queries):
         customers = query.all()
     return time.time() - t0
 
+def time_cached_queries(queries):
+    pass
+
 def time_random_queries(num_queries):
     queries = [random_where_query(random.choice(tables), rand_int(0,1000), rand_int(0,10000)) for i in range(num_queries)]
     zipped = list(zip(*queries))
     normal_queries = zipped[0]
     cached_queries = zipped[1]
+    no_cache_time, cache_time = time_queries(normal_queries), time_queries(cached_queries)
+    hit_rate = CachedDBSession.cache.get_hit_rate()
     print("No Cache time: {}".format(time_queries(normal_queries)))
-
     print("Cache time: {}".format(time_queries(cached_queries)))
+    print("Cache hit rate:", CachedDBSession.cache.get_hit_rate())
+    return no_cache_time, cache_time, hit_rate
 
 def run_benchmarks():
     tablesizes = [10000, 20000, 30000, 40000, 50000, 60000]
+    results = []
     for tablesize in tablesizes:
         init_benchmarks(tablesize=tablesize)
-        time_random_queries(30)
+        no_cache_time, cache_time, hit_rate = time_random_queries(30)
+        results.append((no_cache_time, cache_time, hit_rate))
+    print(results)
 
 if __name__ == "__main__":
     run_benchmarks()
